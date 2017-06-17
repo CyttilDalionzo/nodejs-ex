@@ -3,6 +3,7 @@ var express = require('express'),
     fs      = require('fs'),
     app     = express(),
     eps     = require('ejs'),
+    io      = require('socket.ui')(http);
     morgan  = require('morgan');
     
 Object.assign=require('object-assign')
@@ -105,3 +106,26 @@ app.listen(port, ip);
 console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
+
+// This is where my shit appears
+
+// A user connects
+io.on('connection', function(socket){
+  // A log message is displayed
+  console.log('a user connected');
+
+  // Furthermore, from now, this user can send chat messages
+  socket.on('chat message', function(msg){
+    io.emit('chat message', msg);
+    console.log('message: ' + msg);
+  });
+
+  // And, of course, disconnect
+  socket.on('disconnect', function(){
+    console.log('user disconnected');
+  });
+});
+
+http.listen(3000, function(){
+  console.log('listening on *:3000');
+});
