@@ -104,7 +104,7 @@ initDb(function(err){
 // This is where my shit appears
 
 var server = app.listen(port, ip);
-var io = require('socket.io').listen(server),
+var io = require('socket.io').listen(server);
 
 console.log('Server running on http://%s:%s', ip, port);
 
