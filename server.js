@@ -3,7 +3,7 @@ var express = require('express'),
     fs      = require('fs'),
     app     = express(),
     eps     = require('ejs'),
-    io      = require('socket.ui')(http);
+    io      = require('socket.io')(http);
     morgan  = require('morgan');
     
 Object.assign=require('object-assign')
