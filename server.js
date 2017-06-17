@@ -3,9 +3,6 @@ var express = require('express'),
     fs      = require('fs'),
     app     = express(),
     eps     = require('ejs'),
-    http    = require('http'),
-    server  = http.createServer(app),
-    io      = require('socket.io')(server),
     morgan  = require('morgan');
     
 Object.assign=require('object-assign')
@@ -104,12 +101,17 @@ initDb(function(err){
   console.log('Error connecting to Mongo. Message:\n'+err);
 });
 
-server.listen(port, ip); // replaces app.listen, because we're working with socket.io
+// This is where my shit appears
+
+var server = app.listen(port, ip);
+var io = require('socket.io').listen(server),
+
 console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
 
-// This is where my shit appears
+/*
+
 
 // A user connects
 io.on('connection', function(socket){
@@ -131,3 +133,5 @@ io.on('connection', function(socket){
 server.listen(3000, function(){
   console.log('listening on *:3000');
 });
+
+*/
