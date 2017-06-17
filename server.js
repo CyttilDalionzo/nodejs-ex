@@ -3,8 +3,9 @@ var express = require('express'),
     fs      = require('fs'),
     app     = express(),
     eps     = require('ejs'),
-    http    = require('http').Server(app),
-    io      = require('socket.io')(http),
+    http    = require('http'),
+    server  = http.createServer(app),
+    io      = require('socket.io').listen(server),
     morgan  = require('morgan');
     
 Object.assign=require('object-assign')

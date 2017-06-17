@@ -5,6 +5,9 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <title>CHAT</title>
 
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+   <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+
   <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font: 13px Helvetica, Arial; }
@@ -26,8 +29,6 @@
     </form>
 
  	<!-- Loads and initializes socket.io -->
- 	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.slim.js"></script>
-	<script src="https://code.jquery.com/jquery-1.11.1.js"></script>
 	<script>
 	  $(function () {
 	    var socket = io();
