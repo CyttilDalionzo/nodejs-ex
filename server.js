@@ -110,8 +110,6 @@ console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
 
-/*
-
 
 // A user connects
 io.on('connection', function(socket){
@@ -130,8 +128,7 @@ io.on('connection', function(socket){
   });
 });
 
-server.listen(3000, function(){
-  console.log('listening on *:3000');
+server.listen(8080, function(){
+  console.log('listening on *:8080');
 });
 
-*/
