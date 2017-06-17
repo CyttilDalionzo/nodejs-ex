@@ -110,11 +110,14 @@ console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
 
+var usersOnline = 0;
 
 // A user connects
 io.on('connection', function(socket){
   // A log message is displayed
   console.log('a user connected');
+  usersOnline++;
+  io.emit('user connect', usersOnline);
 
   // Furthermore, from now, this user can send chat messages
   socket.on('chat message', function(msg){
@@ -124,6 +127,8 @@ io.on('connection', function(socket){
 
   // And, of course, disconnect
   socket.on('disconnect', function(){
+    usersOnline--;
+    io.emit('user connect', usersOnline);
     console.log('user disconnected');
   });
 });

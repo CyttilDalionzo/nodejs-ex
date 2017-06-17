@@ -22,6 +22,7 @@
 
  <body>
  	<h1>WELKOM BIJ DE TRAMPOLINEDRAAKJES</h1>
+ 	<p id="countUsers">(0 gebruikers online)</p>
 
  	<ul id="messages"></ul>
     <form action="">
@@ -43,6 +44,10 @@
 	    // Retrieve chat message FROM server
 	    socket.on('chat message', function(msg){
 	      $('#messages').append($('<li>').text(msg));
+	    });
+
+	    socket.on('user connect', function(msg) {
+	    	$("#countUsers").html("( " + msg + " gebruikers online)");
 	    });
 	  });
 	</script>
