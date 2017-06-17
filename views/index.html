@@ -3,53 +3,79 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-  <title>CHAT</title>
+  <title>ONLINE MULTIPLAYER PONG</title>
 
    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+   <script src="phaser.min.js"></script>
+   <script src="mainState.js"></script>
 
-  <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font: 13px Helvetica, Arial; }
-      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
-      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
-      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
-      #messages { list-style-type: none; margin: 0; padding: 0; }
-      #messages li { padding: 5px 10px; }
-      #messages li:nth-child(odd) { background: #eee; }
-    </style>
+   <style type="text/css">
+	body {
+		margin:0;
+		padding:0;
+		width:100%;
+		height:100%;
+		overflow:hidden;
+	}
+	</style>
+
  </head>
 
  <body>
- 	<h1>WELKOM BIJ DE TRAMPOLINEDRAAKJES</h1>
- 	<p id="countUsers">(0 gebruikers online)</p>
-
- 	<ul id="messages"></ul>
-    <form action="">
-      <input id="m" autocomplete="off" /><button>Send</button>
-    </form>
+ 	<div style="position:absolute;padding:5px;">
+ 	<p id="roomNum">NaN</p>
+ 	<p id="gameStatus">NaN</p>
+ 	<p id="inputUpdate">NaN</p>
+ 	</div>
 
  	<!-- Loads and initializes socket.io -->
 	<script>
 	  $(function () {
-	    var socket = io();
+	    globalSocket = io();
+	    var PLAYER_NUM = -1;
 
-	    // Send chat message TO server
-	    $('form').submit(function(){
-	      socket.emit('chat message', $('#m').val());
-	      $('#m').val('');
-	      return false;
+	    // Retrieve room/game data
+	    globalSocket.on('data', function(msg) {
+	    	PLAYER_NUM = msg.player;
+	    	$("#roomNum").html("You are in room " + msg.room + " as player " + msg.player);
 	    });
 
-	    // Retrieve chat message FROM server
-	    socket.on('chat message', function(msg){
-	      $('#messages').append($('<li>').text(msg));
+	    // Retrieve wait/start/stop signals
+	    globalSocket.on('signal', function(msg) {
+	    	var statusHTML = "";
+
+	    	if(msg == "wait") {
+	    		statusHTML = "Waiting for another player";
+	    	} else if(msg == "start") {
+	    		statusHTML = "Starting the game!";
+
+	    		Scene.Main.prototype.initialize(PLAYER_NUM);
+	    	} else if(msg == "disconnect") {
+	    		statusHTML = "Oh noes! The opponent disconnected!";
+	    	}
+
+	    	$("#gameStatus").html(statusHTML);
 	    });
 
-	    socket.on('user connect', function(msg) {
-	    	$("#countUsers").html("( " + msg + " gebruikers online)");
+	    // Retrieve input FROM other player
+	    globalSocket.on('input', function(msg) {
+	    	$("#inputUpdate").html("Opponent sends: x = " + msg.x + " and y = " + msg.y);
 	    });
+
+	    // Sending input TO other player (via the server)
+	    // is handled by phaser, aka the game
 	  });
+	</script>
+
+	<script type="text/javascript">
+		var game = null;
+
+		window.onload = function() {
+			game = new Phaser.Game('100%','100%',Phaser.AUTO,'O');
+			game.state.add('Main', Scene.Main);
+			game.state.start('Main');
+		};
 	</script>
  </body>
  </html>

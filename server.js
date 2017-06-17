@@ -3,9 +3,14 @@ var express = require('express'),
     fs      = require('fs'),
     app     = express(),
     eps     = require('ejs'),
+    path    = require('path'),
     morgan  = require('morgan');
     
 Object.assign=require('object-assign')
+
+var papapapath = path.join(__dirname, 'public');
+console.log("CURRENT DIRECTORY " + papapapath);
+app.use(express.static(papapapath));
 
 app.engine('html', require('ejs').renderFile);
 app.use(morgan('combined'))
@@ -91,6 +96,8 @@ app.get('/pagecount', function (req, res) {
   }
 });
 
+app.use(express.static('public'));
+
 // error handling
 app.use(function(err, req, res, next){
   console.error(err.stack);
@@ -110,25 +117,64 @@ console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
 
-var usersOnline = 0;
+var roomID = 0;
+var freeRoom = false;
 
 // A user connects
-io.on('connection', function(socket){
-  // A log message is displayed
-  console.log('a user connected');
-  usersOnline++;
-  io.emit('user connect', usersOnline);
+io.on('connection', function(socket) {
 
-  // Furthermore, from now, this user can send chat messages
-  socket.on('chat message', function(msg){
-    io.emit('chat message', msg);
-    console.log('message: ' + msg);
+  var myRoom = roomID;
+  var player = 0;
+
+  // If there's a free room (somebody is waiting for another player)
+  if(freeRoom) {
+
+    // Tell our user that he's the second player
+    player = 1;
+
+    // Join the room
+    socket.join(roomID);
+
+    // Close the room
+    freeRoom = false;
+
+    // Return game data to player (only sender)
+    var dataObject = {room: myRoom, player: player};
+    socket.emit('data', dataObject);
+
+    // Tell both players the game can start
+    io.in(roomID).emit("signal", "start");
+
+    // Increase roomID (for next room)
+    roomID++;
+  } else {
+
+    // Tell the user that he's the first player
+    player = 0;
+    
+    // Create a new room (automatically done by joining it)
+    socket.join(roomID);
+
+    // Set this room to be open/free
+    freeRoom = true;
+
+    // Return game data to player (only sender)
+    var dataObject = {room: myRoom, player: player};
+    socket.emit('data', dataObject);
+
+    // Tell the player it has to wait for another player
+    io.in(roomID).emit("signal", "wait");
+  }
+
+  // When a player moves, tell the other player
+  socket.on('input', function(msg) {
+      socket.broadcast.to(myRoom).emit('input', msg);
+      console.log('input ' + msg);
   });
 
   // And, of course, disconnect
   socket.on('disconnect', function(){
-    usersOnline--;
-    io.emit('user connect', usersOnline);
+    socket.broadcast.to(myRoom).emit('signal', "disconnect");
     console.log('user disconnected');
   });
 });
