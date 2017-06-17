@@ -104,7 +104,7 @@ initDb(function(err){
   console.log('Error connecting to Mongo. Message:\n'+err);
 });
 
-app.listen(port, ip);
+server.listen(port, ip); // replaces app.listen, because we're working with socket.io
 console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
