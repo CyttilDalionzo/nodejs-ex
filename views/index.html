@@ -29,45 +29,6 @@
  	<p id="inputUpdate">NaN</p>
  	</div>
 
- 	<!-- Loads and initializes socket.io -->
-	<script>
-	  $(function () {
-	    globalSocket = io();
-	    var PLAYER_NUM = -1;
-
-	    // Retrieve room/game data
-	    globalSocket.on('data', function(msg) {
-	    	PLAYER_NUM = msg.player;
-	    	$("#roomNum").html("You are in room " + msg.room + " as player " + msg.player);
-	    });
-
-	    // Retrieve wait/start/stop signals
-	    globalSocket.on('signal', function(msg) {
-	    	var statusHTML = "";
-
-	    	if(msg == "wait") {
-	    		statusHTML = "Waiting for another player";
-	    	} else if(msg == "start") {
-	    		statusHTML = "Starting the game!";
-
-	    		Scene.Main.prototype.initialize(PLAYER_NUM);
-	    	} else if(msg == "disconnect") {
-	    		statusHTML = "Oh noes! The opponent disconnected!";
-	    	}
-
-	    	$("#gameStatus").html(statusHTML);
-	    });
-
-	    // Retrieve input FROM other player
-	    globalSocket.on('input', function(msg) {
-	    	$("#inputUpdate").html("Opponent sends: x = " + msg.x + " and y = " + msg.y);
-	    });
-
-	    // Sending input TO other player (via the server)
-	    // is handled by phaser, aka the game
-	  });
-	</script>
-
 	<script type="text/javascript">
 		var game = null;
 

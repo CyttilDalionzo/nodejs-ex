@@ -172,9 +172,19 @@ io.on('connection', function(socket) {
       console.log('input ' + msg);
   });
 
+  socket.on('score', function(msg) {
+    io.in(myRoom).emit('score', msg);
+  });
+
   // And, of course, disconnect
   socket.on('disconnect', function(){
-    socket.broadcast.to(myRoom).emit('signal', "disconnect");
+    if(myRoom == roomID) {
+      // If we are the only ones inside the room, delete and reset the room
+      freeRoom = false;
+    } else {
+      // Otherwise, simply tell the other player you've quit
+      socket.broadcast.to(myRoom).emit('signal', "disconnect");
+    }
     console.log('user disconnected');
   });
 });
