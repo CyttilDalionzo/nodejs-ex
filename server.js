@@ -140,7 +140,7 @@ io.on('connection', function(socket) {
     freeRoom = false;
 
     // Return game data to player (only sender)
-    var dataObject = {room: myRoom, player: player};
+    var dataObject = {room: roomID, player: player};
     socket.emit('data', dataObject);
 
     // Tell both players the game can start
@@ -163,7 +163,7 @@ io.on('connection', function(socket) {
     freeRoom = true;
 
     // Return game data to player (only sender)
-    var dataObject = {room: myRoom, player: player};
+    var dataObject = {room: roomID, player: player};
     socket.emit('data', dataObject);
 
     // Tell the player it has to wait for another player
@@ -172,8 +172,14 @@ io.on('connection', function(socket) {
 
   // Every frame, input is send from player to server
   socket.on('input', function(msg) {
+      myRoom = socket.rooms[0];
+
       // Shortcut to the current room
       var curGame = games[myRoom];
+
+      if(curGame == null) {
+        console.log("couldn't find game")
+      }
 
       // Set player's x position
       curGame.players[msg.num] = {x: msg.x};
