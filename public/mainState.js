@@ -4,10 +4,9 @@ var myNumber = -1;
 var globalSocket = null;
 var ball = null;
 
-var PADDLE_WIDTH = 0.09;
-var PADDLE_HEIGHT = PADDLE_WIDTH * 0.33;
-var BALL_RADIUS = 15;
-var BALL_VELOCITY = 0.3;
+var PADDLE_WIDTH = 0.1;
+var PADDLE_HEIGHT = 0.01;
+var BALL_RADIUS = 0.05;
 
 var score = [0,0];
 
@@ -72,20 +71,24 @@ Scene.Main.prototype = {
 	    });
 
 	    // Retrieve input FROM other player
-	    globalSocket.on('input', function(msg) {
-	    	paddles[(myNumber + 1) % 2].position.x = (1 - msg.x) * game.width;
+	    // Also retrieve updated world state
+	    globalSocket.on('update', function(msg) {
+	    	if(myNumber == 0) {
+		    	ball.position.setTo(msg.ball.x * game.width, msg.ball.y * game.height);	
+		    	paddles[1].position.x = (1 - msg.players[1].x) * game.width;    		
+	    	} else {
+		    	ball.position.setTo((1 - msg.ball.x) * game.width, (1 - msg.ball.y) * game.height);
+		    	paddles[0].position.x = (1 - msg.players[0].x) * game.width;
+	    	}
+	    	
 	    });
 	},
-
-	// TO DO: Make ball move, and bounce
-	// TO DO: Actually score points, and finish the game
 
 	update: function () {
 		if(paddles.length != 2) {
 			return;
 		}
 
-		var movementUpdate = false;
 		var myPaddle = paddles[myNumber];
 		if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT))
 	    {
@@ -106,44 +109,19 @@ Scene.Main.prototype = {
 	        movementUpdate = true;
 	    }
 
-	    // If we have moved, send input TO other player
+	    // Send input TO other player
 	    // Position is sent as ratio (because screen sizes differ)
-	    if(movementUpdate) {
-	    	var inputData = {x: myPaddle.x/game.width, y: myPaddle.y/game.height};
-	    	globalSocket.emit('input', inputData);
-	    }
-
-	    game.physics.arcade.collide(ball, paddles[0]);
-	    game.physics.arcade.collide(ball, paddles[1]);
-
-	    // Check x-bounds of the world
-	    if(ball.x < BALL_RADIUS) {
-	    	ball.x = BALL_RADIUS;
-	    	ball.body.velocity.x = BALL_VELOCITY * game.width;
-	    } else if(ball.x > game.width - BALL_RADIUS) {
-	    	ball.x = game.width - BALL_RADIUS;
-	    	ball.body.velocity.x = -BALL_VELOCITY * game.width;
-	    }
-
-	    // Check y-bounds (the first player is the authority on scoring points)
-	    if(myNumber == 0) {
-		    if(ball.y > game.height) {
-		    	// opponent scored, point for them!
-		    	globalSocket.emit('score', (myNumber + 1) % 2);
-		    } else if(ball.y < 0 ) {
-		    	// we scored
-		    	globalSocket.emit('score', myNumber);
-		    }
-		}
+    	var inputData = {x: myPaddle.x/game.width, num: myNumber};
+    	globalSocket.emit('input', inputData);
 	},
 
 	initialize: function() {
 		paddles = [];
 
 		// add paddles
-		var paddleOrder = [game.height - 30, 30];
+		var paddleOrder = [game.height * 0.9, game.height * 0.1];
 		if(myNumber == 1) {
-			paddleOrder = [30, game.height - 30];
+			paddleOrder = [game.height * 0.1, game.height * 0.9];
 		}
 
 		this.createPaddle(game.width * 0.5, paddleOrder[0], 'player1');
@@ -159,19 +137,9 @@ Scene.Main.prototype = {
 
 		// add ball
 		ball = game.add.sprite(game.width * 0.5, game.height * 0.5, 'ball');
-		ball.width = ball.height = BALL_RADIUS;
+		ball.width = BALL_RADIUS*game.width;
+		ball.height = BALL_RADIUS*game.height;
 		ball.anchor.setTo(0.5, 0.5);
-
-		game.physics.arcade.enable(ball);
-		ball.body.setCircle(BALL_RADIUS);
-		ball.body.velocity.x = BALL_VELOCITY * game.width;
-		ball.body.velocity.y = BALL_VELOCITY * game.width;
-		if(myNumber == 1) {
-			ball.body.velocity.y *= -1;
-			ball.body.velocity.x *= -1;
-		}
-
-		ball.body.bounce.set(1, 1);
 	},
 
 	createPaddle: function(x, y, sprite) {
@@ -180,9 +148,6 @@ Scene.Main.prototype = {
 		sprite.width = PADDLE_WIDTH * game.width;
 		sprite.height = PADDLE_HEIGHT * game.width;
 		sprite.anchor.setTo(0.5, 0.5);
-
-		game.physics.arcade.enable(sprite);
-		sprite.body.immovable = true;
 
 		paddles.push(sprite);
 	}

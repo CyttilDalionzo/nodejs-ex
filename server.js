@@ -119,6 +119,7 @@ module.exports = app ;
 
 var roomID = 0;
 var freeRoom = false;
+var games = [];
 
 // A user connects
 io.on('connection', function(socket) {
@@ -145,6 +146,9 @@ io.on('connection', function(socket) {
     // Tell both players the game can start
     io.in(roomID).emit("signal", "start");
 
+    // Create the game on the server
+    games[roomID] = { players: [{x: 0.5}, {x: 0.5}], ball: {x: 0.5, y: 0.5, velX: 0.006, velY: 0.006 }, score: [0, 0] };
+
     // Increase roomID (for next room)
     roomID++;
   } else {
@@ -166,20 +170,79 @@ io.on('connection', function(socket) {
     io.in(roomID).emit("signal", "wait");
   }
 
-  // When a player moves, tell the other player
+  // Every frame, input is send from player to server
   socket.on('input', function(msg) {
-      socket.broadcast.to(myRoom).emit('input', msg);
-      console.log('input ' + msg);
-  });
+      // Shortcut to the current room
+      var curGame = games[myRoom];
 
-  socket.on('score', function(msg) {
-    io.in(myRoom).emit('score', msg);
+      // Set player's x position
+      curGame.players[msg.num] = {x: msg.x};
+
+      // One of the players updates the game state (aka, the ball)
+      if(msg.num == 0) {
+        curGame.ball.x += curGame.ball.velX;
+        curGame.ball.y += curGame.ball.velY;
+      }
+
+      // Check y-bounds
+      if(curGame.ball.y > 1) {
+        // opponent scored
+        curGame.score[1]++;
+        curGame.ball.x = curGame.ball.y = 0.5;
+        io.in(myRoom).emit('score', 1);
+      } else if(curGame.ball.y < 0 ) {
+        // we scored
+        curGame.score[0]++;
+        io.in(myRoom).emit('score', 0);
+        curGame.ball.x = curGame.ball.y = 0.5;
+      }
+
+      // Check for hit against a player
+      var rect1 = {x: curGame.players[0].x - 0.05, y: 0.9 - 0.005, width: 0.1, height: 0.01}
+      var rect2 = {x: (1 - curGame.players[1].x) - 0.05, y: 0.1 - 0.005, width: 0.1, height: 0.01}
+      var ballRect = {x: curGame.ball.x - 0.025, y: curGame.ball.y - 0.025, width: 0.05, height: 0.05}
+
+      // PLAYER 1
+      if (rect1.x < ballRect.x + ballRect.width &&
+         rect1.x + rect1.width > ballRect.x &&
+         rect1.y < ballRect.y + ballRect.height &&
+         rect1.height + rect1.y > ballRect.y) {
+         // collision detected!
+        curGame.ball.velY = -0.006;
+        console.log("player uno collides");
+      }
+
+      // PLAYER 2
+      if (rect2.x < ballRect.x + ballRect.width &&
+         rect2.x + rect2.width > ballRect.x &&
+         rect2.y < ballRect.y + ballRect.height &&
+         rect2.height + rect2.y > ballRect.y) {
+         // collision detected!
+        curGame.ball.velY = 0.006;
+          console.log("player duo collides");
+      }
+
+      // Check x-bounds of the world
+      if(curGame.ball.x < 0) {
+        curGame.ball.x = 0;
+        curGame.ball.velX *= -1;
+      } else if(curGame.ball.x > 1) {
+        curGame.ball.x = 1;
+        curGame.ball.velX *= -1;
+      }
+
+      // The new game state is relayed as an update to all players
+      io.in(myRoom).emit('update', curGame);
+
+      //socket.broadcast.to(myRoom).emit('update', msg);
+      console.log('input ' + msg);
   });
 
   // And, of course, disconnect
   socket.on('disconnect', function(){
     if(myRoom == roomID) {
       // If we are the only ones inside the room, delete and reset the room
+      games[roomID] = {};
       freeRoom = false;
     } else {
       // Otherwise, simply tell the other player you've quit
