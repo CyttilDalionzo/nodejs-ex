@@ -117,143 +117,129 @@ console.log('Server running on http://%s:%s', ip, port);
 
 module.exports = app ;
 
-var roomID = 0;
-var freeRoom = false;
-var games = [];
+var roomID = -1;
+var amountInRoom = 0;
+var games = {};
+
+var MAX_PLAYER_AMOUNT = 4;
 
 // A user connects
 io.on('connection', function(socket) {
 
+  /*** 
+    * If you're the first to start a game
+    * Create the game on the server
+   ***/
+  if(amountInRoom == 0) {
+
+    // Increase roomID
+    roomID++;
+
+    // Create the game on the server
+    games[roomID] = { players: [], map: [], stats: [] };
+
+    // Create the game map, assign it
+    games[roomID].map = createMap();
+  }
+
   var myRoom = roomID;
   var player = 0;
 
-  // If there's a free room (somebody is waiting for another player)
-  if(freeRoom) {
+  /*** 
+    * If there's already a game going on that has room, join it
+   ***/
+  if(amountInRoom < MAX_PLAYER_AMOUNT) {
 
-    // Tell our user that he's the second player
-    player = 1;
+    // Tell all players that somebody has joined
+    io.in(roomID).emit("signal", "join");
+
+    // Add player to room count
+    amountInRoom++;
+
+    // Tell our user which player he is
+    player = amountInRoom;
 
     // Join the room
     socket.join(roomID);
 
-    // Close the room
-    freeRoom = false;
+    // Join the game
+    createNewPlayer(roomID);
 
     // Return game data to player (only sender)
-    var dataObject = {room: roomID, player: player};
+    // Data includes: room number + player number + map + all other players 
+    var dataObject = { room: roomID, player: player, map: games[roomID].map, players: games[roomID].players };
     socket.emit('data', dataObject);
-
-    // Tell both players the game can start
-    io.in(roomID).emit("signal", "start");
-
-    // Create the game on the server
-    games[roomID] = { players: [{x: 0.5}, {x: 0.5}], ball: {x: 0.5, y: 0.5, velX: 0.006, velY: 0.006 }, score: [0, 0] };
-
-    // Increase roomID (for next room)
-    roomID++;
-  } else {
-
-    // Tell the user that he's the first player
-    player = 0;
-    
-    // Create a new room (automatically done by joining it)
-    socket.join(roomID);
-
-    // Set this room to be open/free
-    freeRoom = true;
-
-    // Return game data to player (only sender)
-    var dataObject = {room: roomID, player: player};
-    socket.emit('data', dataObject);
-
-    // Tell the player it has to wait for another player
-    io.in(roomID).emit("signal", "wait");
   }
 
-  // Every frame, input is send from player to server
+  /*** 
+    * One of the players (the first one) calls the update loop
+    * The update loop does two things: 
+    *   update the game world (according to latest input and state)
+    *   relay this update to players
+   ***/
+  socket.on('update', function(msg) {
+
+    // Shortcut to this player's room
+    myRoom = msg;
+    var curGame = games[myRoom];
+
+    // TO DO
+    // Actually run game code and update the world
+
+    // TO DO
+    // It's not necessary to send the whole game, so cherry-pick
+    // For example, the map should be sent once and then forgotten about
+    var updatedGame = { players: curGame.players };
+
+    // The new game state is relayed as an update to all players
+    io.in(myRoom).emit('update', updatedGame);
+  });
+
+  // When something happens, input is send from player to server
   socket.on('input', function(msg) {
-      myRoom = socket.rooms[0];
-
-      // Shortcut to the current room
+      // Shortcut to this player's room
+      myRoom = msg.room;
       var curGame = games[myRoom];
+      var myPlayer = curGame.players[msg.num];
 
-      if(curGame == null) {
-        console.log("couldn't find game")
-      }
+      var input = msg.input;
 
-      // Set player's x position
-      curGame.players[msg.num] = {x: msg.x};
+      // Update the position of this player
+      myPlayer.x += input[0] * myPlayer.speed;
+      myPlayer.y += input[1] * myPlayer.speed;
 
-      // One of the players updates the game state (aka, the ball)
-      if(msg.num == 0) {
-        curGame.ball.x += curGame.ball.velX;
-        curGame.ball.y += curGame.ball.velY;
-      }
-
-      // Check y-bounds
-      if(curGame.ball.y > 1) {
-        // opponent scored
-        curGame.score[1]++;
-        curGame.ball.x = curGame.ball.y = 0.5;
-        io.in(myRoom).emit('score', 1);
-      } else if(curGame.ball.y < 0 ) {
-        // we scored
-        curGame.score[0]++;
-        io.in(myRoom).emit('score', 0);
-        curGame.ball.x = curGame.ball.y = 0.5;
-      }
-
-      // Check for hit against a player
-      var rect1 = {x: curGame.players[0].x - 0.05, y: 0.9 - 0.005, width: 0.1, height: 0.01}
-      var rect2 = {x: (1 - curGame.players[1].x) - 0.05, y: 0.1 - 0.005, width: 0.1, height: 0.01}
-      var ballRect = {x: curGame.ball.x - 0.025, y: curGame.ball.y - 0.025, width: 0.05, height: 0.05}
-
-      // PLAYER 1
-      if (rect1.x < ballRect.x + ballRect.width &&
-         rect1.x + rect1.width > ballRect.x &&
-         rect1.y < ballRect.y + ballRect.height &&
-         rect1.height + rect1.y > ballRect.y) {
-         // collision detected!
-        curGame.ball.velY = -0.006;
-        console.log("player uno collides");
-      }
-
-      // PLAYER 2
-      if (rect2.x < ballRect.x + ballRect.width &&
-         rect2.x + rect2.width > ballRect.x &&
-         rect2.y < ballRect.y + ballRect.height &&
-         rect2.height + rect2.y > ballRect.y) {
-         // collision detected!
-        curGame.ball.velY = 0.006;
-          console.log("player duo collides");
-      }
-
-      // Check x-bounds of the world
-      if(curGame.ball.x < 0) {
-        curGame.ball.x = 0;
-        curGame.ball.velX *= -1;
-      } else if(curGame.ball.x > 1) {
-        curGame.ball.x = 1;
-        curGame.ball.velX *= -1;
-      }
-
-      // The new game state is relayed as an update to all players
-      io.in(myRoom).emit('update', curGame);
-
-      //socket.broadcast.to(myRoom).emit('update', msg);
-      console.log('input ' + msg);
+      // TO DO
+      // Update the state of this player (alive, shooting, etc.)
   });
 
   // And, of course, disconnect
-  socket.on('disconnect', function(){
-    if(myRoom == roomID) {
-      // If we are the only ones inside the room, delete and reset the room
-      games[roomID] = {};
-      freeRoom = false;
+  socket.on('disconnect', function() {
+    var curGame = games[myRoom];
+
+    // Tell the other players you've quit
+    socket.broadcast.to(myRoom).emit('signal', "disconnect");
+
+    if(player == 0) {
+      // If we are the first player...
+      if(curGame.players.length < 2) {
+        // If there's nobody else, simply delete the room
+        curGame = {};
+      } else {
+        // If there are other players, find another one to control the update loop
+        curGame.players[player] = null;
+
+        for(var i = 0; i < curGame.players.length; i++) {
+          if(curGame.players[i] != null) {
+            io.in(myRoom).emit('boss change', i);
+          }
+        }
+      }
+
     } else {
-      // Otherwise, simply tell the other player you've quit
-      socket.broadcast.to(myRoom).emit('signal', "disconnect");
+      // Simply delete yourself from the game
+      curGame.players[player] = null;
     }
+
     console.log('user disconnected');
   });
 });
@@ -261,4 +247,36 @@ io.on('connection', function(socket) {
 server.listen(8080, function(){
   console.log('listening on *:8080');
 });
+
+function createNewPlayer(id) {
+  var newPlayer = { x: 0, y: 0, lives: 3, health: 100, speed: 5 };
+  games[id].players.push(newPlayer);
+}
+
+function createMap() {
+  var WIDTH = 10;
+  var HEIGHT = 10;
+
+  var map = [];
+
+  for(var i = 0; i < WIDTH; i++) {
+    map[i] = [];
+    for(var j = 0; j < HEIGHT; j++) {
+      if(i == 0 || i == WIDTH-1 || j == 0 || j == HEIGHT-1) {
+        map[i][j] = 1;
+      } else {
+        map[i][j] = Math.round(Math.random());
+      }
+    }
+  }
+
+  return map;
+}
+
+function intersect(rect1, rect2) {
+  return rect1.x < rect2.x + rect2.width &&
+         rect1.x + rect1.width > rect2.x &&
+         rect1.y < rect2.y + rect2.height &&
+         rect1.height + rect1.y > rect2.y;
+}
 

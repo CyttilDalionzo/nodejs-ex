@@ -1,14 +1,14 @@
 var Scene = {};
-var paddles = [];
+
 var myNumber = -1;
+var myRoom = -1;
+var allPlayers = [];
+var myPlayer = null;
+var iAmTheBoss = false;
+
 var globalSocket = null;
-var ball = null;
 
-var PADDLE_WIDTH = 0.1;
-var PADDLE_HEIGHT = 0.01;
-var BALL_RADIUS = 0.05;
-
-var score = [0,0];
+var CELL_SIZE = 100;
 
 Scene.Main = function (game) {
 
@@ -16,7 +16,7 @@ Scene.Main = function (game) {
 
 Scene.Main.prototype = {
 	preload: function() {
-		game.stage.backgroundColor = '#CCCCCC';
+		game.stage.backgroundColor = '#555';
 
 		game.load.image('player1', 'Player1.png');
 		game.load.image('player2', 'Player2.png');
@@ -28,127 +28,116 @@ Scene.Main.prototype = {
 	},
 
 	create: function () {
-		game.physics.startSystem(Phaser.Physics.ARCADE);
-
-		// // RESIZING & RESCALING
-		game.scale.scaleMode = Phaser.ScaleManager.RESIZE;
-		/*game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
-		game.scale.setShowAll();*/
-		game.scale.refresh();
-
-		// // WEBSOCKET STUFF
+	    /*** 
+	     * WEBSOCKET STUFF
+	    ***/
 		globalSocket = io();
 
 	    // Retrieve room/game data
 	    globalSocket.on('data', function(msg) {
 	    	myNumber = msg.player;
-	    	$("#roomNum").html("You are in room " + msg.room + " as player " + msg.player);
+	    	myRoom = msg.room;
+	    	$("#roomNum").html("You are in room " + myRoom + " as player " + myNumber);
+
+	    	// determine who's boss
+	    	if(myNumber == 1) {
+	    		iAmTheBoss = true;
+	    	}
+
+	    	// load the map
+	    	var map = msg.map;
+	    	for(var i = 0; i < map.length; i++) {
+	    		for(var j = 0; j < map[i].length; j++) {
+	    			Scene.Main.prototype.createTile(i, j, map[i][j]);
+	    		}
+	    	}
+	    	game.world.setBounds(0, 0, (map.length * CELL_SIZE), (map.length[0] * CELL_SIZE));
+
+	    	// Create all players
+	    	var p = msg.players;
+	    	for(var i = 0; i < p.length; i++) {
+	    		var cP = p[i];
+	    		Scene.Main.prototype.createPlayer(cP.x, cP.y);
+	    	}
+
+	    	// Assign the right player to ourselves
+	    	myPlayer = allPlayers[(myNumber-1)];
+	    	game.camera.follow(myPlayer, Phaser.Camera.FOLLOW_PLATFORMER);
 	    });
 
-	    // Somebody scored a point
-	    globalSocket.on('score', function(msg) {
-	    	score[msg]++;
-	    	Scene.Main.prototype.createBall();
-
-	    	$("#inputUpdate").html("Score: " + score[0] + " - " + score[1]);
+	    globalSocket.on('boss change', function(msg) {
+	    	if(msg == myNumber) {
+	    		iAmTheBoss = true;
+	    	}
 	    });
 
 	    // Retrieve wait/start/stop signals
 	    globalSocket.on('signal', function(msg) {
 	    	var statusHTML = "";
 
-	    	if(msg == "wait") {
-	    		statusHTML = "Waiting for another player";
-	    	} else if(msg == "start") {
-	    		statusHTML = "Starting the game!";
-
-	    		Scene.Main.prototype.initialize();
+	    	if(msg == "join") {
+	    		statusHTML = "A new player joined!";
+	    		Scene.Main.prototype.createPlayer(0, 0);
 	    	} else if(msg == "disconnect") {
-	    		statusHTML = "Oh noes! The opponent disconnected!";
+	    		statusHTML = "A player disconnected!";
 	    	}
 
 	    	$("#gameStatus").html(statusHTML);
 	    });
 
-	    // Retrieve input FROM other player
-	    // Also retrieve updated world state
+	    // Retrieve updated world state FROM server
 	    globalSocket.on('update', function(msg) {
-	    	if(myNumber == 0) {
-		    	ball.position.setTo(msg.ball.x * game.width, msg.ball.y * game.height);	
-		    	paddles[1].position.x = (1 - msg.players[1].x) * game.width;    		
-	    	} else {
-		    	ball.position.setTo((1 - msg.ball.x) * game.width, (1 - msg.ball.y) * game.height);
-		    	paddles[0].position.x = (1 - msg.players[0].x) * game.width;
+	    	for(var i = 0; i < allPlayers.length; i++) {
+	    		var cP = msg.players[i];
+	    		allPlayers[i].position.setTo(cP.x, cP.y);
 	    	}
-	    	
 	    });
 	},
 
 	update: function () {
-		if(paddles.length != 2) {
-			return;
-		}
+		var movementUpdate = [0, 0];
 
-		var myPaddle = paddles[myNumber];
 		if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT))
 	    {
-	        myPaddle.x -= myPaddle.speed;
-	        var edge = game.width * (PADDLE_WIDTH * 0.5);
-	        if(myPaddle.x <= edge) {
-	        	myPaddle.x = edge;
-	        }
-	        movementUpdate = true;
+	        movementUpdate[0] = -1;
 	    }
 	    else if (game.input.keyboard.isDown(Phaser.Keyboard.RIGHT))
 	    {
-	        myPaddle.x += myPaddle.speed;
-	        var edge = game.width * (1 - PADDLE_WIDTH * 0.5);
-	        if(myPaddle.x >= edge) {
-	        	myPaddle.x = edge;
-	        }
-	        movementUpdate = true;
+	        movementUpdate[0] = 1;
+	    }
+	    if (game.input.keyboard.isDown(Phaser.Keyboard.UP))
+
+	    {
+	        movementUpdate[1] = -1;
+	    }
+	    else if (game.input.keyboard.isDown(Phaser.Keyboard.DOWN))
+	    {
+	        movementUpdate[1] = 1;
 	    }
 
 	    // Send input TO other player
-	    // Position is sent as ratio (because screen sizes differ)
-    	var inputData = {x: myPaddle.x/game.width, num: myNumber};
-    	globalSocket.emit('input', inputData);
+	    if(movementUpdate[0] != 0 || movementUpdate[1] != 0) {
+	    	var inputData = { num: (myNumber - 1), room: myRoom, input: movementUpdate };
+    		globalSocket.emit('input', inputData);
+	    }
+
+	    // If we're the first player, activate update loop on server each frame
+	    if(iAmTheBoss) {
+	    	globalSocket.emit('update', myRoom);
+	    }
 	},
 
-	initialize: function() {
-		paddles = [];
+	createPlayer: function(x, y) {
+		var temp = game.add.sprite(x, y, 'player1');
+		temp.width = temp.height = CELL_SIZE;
+		allPlayers.push(temp);
+	},
 
-		// add paddles
-		var paddleOrder = [game.height * 0.9, game.height * 0.1];
-		if(myNumber == 1) {
-			paddleOrder = [game.height * 0.1, game.height * 0.9];
+	createTile: function(i, j, what) {
+		if(what == 0) {
+			return;
 		}
-
-		this.createPaddle(game.width * 0.5, paddleOrder[0], 'player1');
-		this.createPaddle(game.width * 0.5, paddleOrder[1], 'player2');
-		this.createBall();
-	},
-
-	createBall: function() {
-		if(ball != null) {
-			ball.destroy();
-			ball = null;
-		}
-
-		// add ball
-		ball = game.add.sprite(game.width * 0.5, game.height * 0.5, 'ball');
-		ball.width = BALL_RADIUS*game.width;
-		ball.height = BALL_RADIUS*game.height;
-		ball.anchor.setTo(0.5, 0.5);
-	},
-
-	createPaddle: function(x, y, sprite) {
-		var sprite = game.add.sprite(x, y, sprite);
-		sprite.speed = 10;
-		sprite.width = PADDLE_WIDTH * game.width;
-		sprite.height = PADDLE_HEIGHT * game.width;
-		sprite.anchor.setTo(0.5, 0.5);
-
-		paddles.push(sprite);
+		var temp = game.add.sprite(i * CELL_SIZE, j * CELL_SIZE, 'player2');
+		temp.width = temp.height = CELL_SIZE;
 	}
 }
