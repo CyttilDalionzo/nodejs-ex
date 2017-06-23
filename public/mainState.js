@@ -4,11 +4,15 @@ var myNumber = -1;
 var myRoom = -1;
 var allPlayers = [];
 var myPlayer = null;
+
 var iAmTheBoss = false;
+var iShouldSend = 0;
+var accumDeltaTime = 0;
 
 var globalSocket = null;
 
-var CELL_SIZE = 100;
+var CELL_SIZE = 50;
+var MAP = null;
 
 Scene.Main = function (game) {
 
@@ -35,16 +39,17 @@ Scene.Main.prototype = {
 
 	    // Retrieve room/game data
 	    globalSocket.on('data', function(msg) {
+	    	// Display some useful messages
 	    	myNumber = msg.player;
 	    	myRoom = msg.room;
 	    	$("#roomNum").html("You are in room " + myRoom + " as player " + myNumber);
 
-	    	// determine who's boss
+	    	// Determine who's boss
 	    	if(myNumber == 1) {
 	    		iAmTheBoss = true;
 	    	}
 
-	    	// load the map
+	    	// Load the map
 	    	var map = msg.map;
 	    	for(var i = 0; i < map.length; i++) {
 	    		for(var j = 0; j < map[i].length; j++) {
@@ -52,6 +57,7 @@ Scene.Main.prototype = {
 	    		}
 	    	}
 	    	game.world.setBounds(0, 0, (map.length * CELL_SIZE), (map.length[0] * CELL_SIZE));
+	    	MAP = map;
 
 	    	// Create all players
 	    	var p = msg.players;
@@ -87,6 +93,7 @@ Scene.Main.prototype = {
 
 	    // Retrieve updated world state FROM server
 	    globalSocket.on('update', function(msg) {
+	    	// Go through all players (even our own), and update them
 	    	for(var i = 0; i < allPlayers.length; i++) {
 	    		var cP = msg.players[i];
 	    		allPlayers[i].position.setTo(cP.x, cP.y);
@@ -95,8 +102,12 @@ Scene.Main.prototype = {
 	},
 
 	update: function () {
+		var deltaTime = game.time.elapsed / 1000;
+		accumDeltaTime += deltaTime;
+
 		var movementUpdate = [0, 0];
 
+		// left/right movement
 		if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT))
 	    {
 	        movementUpdate[0] = -1;
@@ -105,31 +116,38 @@ Scene.Main.prototype = {
 	    {
 	        movementUpdate[0] = 1;
 	    }
-	    if (game.input.keyboard.isDown(Phaser.Keyboard.UP))
 
+	    // jump movement
+	    if (game.input.keyboard.isDown(Phaser.Keyboard.UP))
 	    {
 	        movementUpdate[1] = -1;
 	    }
-	    else if (game.input.keyboard.isDown(Phaser.Keyboard.DOWN))
+	    /*else if (game.input.keyboard.isDown(Phaser.Keyboard.DOWN))
 	    {
 	        movementUpdate[1] = 1;
-	    }
+	    }*/
 
-	    // Send input TO other player
+	    // Send input TO other players (iff something changed)
 	    if(movementUpdate[0] != 0 || movementUpdate[1] != 0) {
 	    	var inputData = { num: (myNumber - 1), room: myRoom, input: movementUpdate };
     		globalSocket.emit('input', inputData);
 	    }
 
 	    // If we're the first player, activate update loop on server each frame
+	    // Or, in fact, do it at a lower rate (like, 30 FPS)
 	    if(iAmTheBoss) {
-	    	globalSocket.emit('update', myRoom);
+	    	iShouldSend = (iShouldSend + 1) % 2;
+	    	if(iShouldSend == 0) {
+		    	globalSocket.emit('update', { room: myRoom, dt: accumDeltaTime });
+		    	accumDeltaTime = 0;
+		    }
 	    }
 	},
 
 	createPlayer: function(x, y) {
 		var temp = game.add.sprite(x, y, 'player1');
 		temp.width = temp.height = CELL_SIZE;
+		temp.anchor.setTo(0.5, 0.5);
 		allPlayers.push(temp);
 	},
 

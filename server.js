@@ -122,6 +122,11 @@ var amountInRoom = 0;
 var games = {};
 
 var MAX_PLAYER_AMOUNT = 4;
+var GRAVITY_CONST = 10;
+
+var CELL_SIZE = 50;
+var MAP_WIDTH = 50;
+var MAP_HEIGHT = 50;
 
 // A user connects
 io.on('connection', function(socket) {
@@ -179,17 +184,132 @@ io.on('connection', function(socket) {
    ***/
   socket.on('update', function(msg) {
 
+    // Get deltatime
+    var dt = msg.dt;
+
     // Shortcut to this player's room
-    myRoom = msg;
+    myRoom = msg.room;
     var curGame = games[myRoom];
+    var players = curGame.players;
 
     // TO DO
     // Actually run game code and update the world
 
+    // For all players ...
+    for(var i = 0; i < players.length; i++) {
+      var cp = players[i];
+
+      // ignore players who have quit
+      if(cp == null) {
+        continue;
+      }
+
+      // apply gravity
+      cp.velY += GRAVITY_CONST * dt;
+
+      // CHECK FOR COLLISIONS
+      // essentially, we calculate a square of grid positions that could possibly have been hit
+      var startGrids = worldToGrid(cp.x, cp.y);
+      var endGrids = worldToGrid(cp.x + cp.velX * dt, cp.y + cp.velY * dt); 
+      var bounds = [ [Math.min(startGrids[0], endGrids[0]) - 1, Math.max(startGrids[0], endGrids[0]) + 1 ], [Math.min(startGrids[1], endGrids[1]) - 1, Math.max(startGrids[1], endGrids[1]) + 1] ];
+
+      var nearestHit = 1;
+      var startC = [cp.x, cp.y];
+      var endC = [cp.x + cp.velX * dt, cp.y + cp.velY * dt];
+
+      // go through this square of squares, and calculate hit positions
+      for(var i = bounds[0][0]; i <= bounds[0][1]; i++) {
+        for(var j = bounds[1][0]; j <= bounds[1][1]; j++) {
+
+          // if there's no square here, continue
+          if(i < 0 || j < 0 || i > MAP_WIDTH || j > MAP_HEIGHT || curGame.map[i][j] == 0) {
+            continue;
+          }
+
+          var hit = false;
+
+          // pad the square with the size of our player
+          var square = { x: (i + 0.5) * CELL_SIZE, y: (j + 0.5) * CELL_SIZE, halfWidth: CELL_SIZE * 0.5, halfHeight: CELL_SIZE * 0.5};
+
+          var paddingX = CELL_SIZE * 0.5;
+          var paddingY = CELL_SIZE * 0.5;
+          var deltaX = (endC[0] - startC[0]);
+          var deltaY = (endC[1] - startC[1]);
+
+          // test the movement segment against this padded square
+          var scaleX = 1.0 / deltaX;
+          var scaleY = 1.0 / deltaY;
+
+          console.log(scaleX + " || " + scaleY);
+
+          var signX = (scaleX > 0) ? 1 : -1;
+          var signY = (scaleY > 0) ? 1 : -1;
+
+          console.log(signX + " || " + signY);
+          console.log(square);
+
+          var nearTimeX = 0, farTimeX = 0, nearTimeY = 0, farTimeY = 0;
+
+          if(deltaX == 0) {
+            nearTimeX = Infinity;
+            farTimeX = Infinity;
+          } else {
+            nearTimeX = (square.x - signX * (square.halfWidth + paddingX) - startC[0]) * scaleX;
+            farTimeX = (square.x + signX * (square.halfWidth + paddingX) - startC[0]) * scaleX;
+          }
+
+          if(deltaY == 0) {
+            nearTimeY = Infinity;
+            farTimeY = Infinity;
+          } else {
+            nearTimeY = (square.y - signY * (square.halfHeight + paddingY) - startC[1]) * scaleY;
+            farTimeY = (square.y + signY * (square.halfHeight + paddingY) - startC[1]) * scaleY;
+          }
+
+          // if no hit at all, ignore and move on
+          if(nearTimeX > farTimeY || nearTimeY > farTimeX) {
+            continue;
+          }
+
+          console.log(nearTimeX + " || " + farTimeX + " || " + nearTimeY + " || " + farTimeY);
+
+          var nearTime = Math.max(nearTimeX, nearTimeY);
+          var farTime = Math.max(farTimeX, farTimeY);
+
+          if(nearTime >= 1 || farTime <= 0) {
+            continue;
+          }
+
+          console.log(nearTime + " .. " + farTime);
+
+          var hitTime = Math.min(Math.max(nearTime, 0), 1);
+          var hitNormals = [0, -signY];
+          if(nearTimeX > nearTimeY) {
+            hitNormals = [-signX, 0];
+          }
+
+          var epsilon = 0.000001;
+          // if hit, check collision axis (x or y), and check if this is the nearest for that axis
+          if(nearTime < nearestHit) {
+            nearestHit = hitTime - epsilon;
+          }
+        }
+      }
+
+      // if nothing was hit, simply apply speed to position
+      cp.x += cp.velX * nearestHit * dt;
+      cp.y += cp.velY * nearestHit * dt;
+
+      // reset x-speed
+      cp.velX = 0;
+
+    }
+
+
     // TO DO
     // It's not necessary to send the whole game, so cherry-pick
     // For example, the map should be sent once and then forgotten about
-    var updatedGame = { players: curGame.players };
+    var updatedGame = { players: players };
 
     // The new game state is relayed as an update to all players
     io.in(myRoom).emit('update', updatedGame);
@@ -204,9 +324,13 @@ io.on('connection', function(socket) {
 
       var input = msg.input;
 
-      // Update the position of this player
-      myPlayer.x += input[0] * myPlayer.speed;
-      myPlayer.y += input[1] * myPlayer.speed;
+      // Update the velocity of this player (and thus its position)
+      myPlayer.velX = input[0] * myPlayer.speed;
+
+      if(input[1] == -1) {
+         myPlayer.velY = input[1] * myPlayer.speed;
+      }
+
 
       // TO DO
       // Update the state of this player (alive, shooting, etc.)
@@ -249,28 +373,32 @@ server.listen(8080, function(){
 });
 
 function createNewPlayer(id) {
-  var newPlayer = { x: 0, y: 0, lives: 3, health: 100, speed: 5 };
+  var newPlayer = { x: 100, y: 100, velX: 0, velY: 0, lives: 3, health: 100, speed: 5 };
   games[id].players.push(newPlayer);
 }
 
 function createMap() {
-  var WIDTH = 10;
-  var HEIGHT = 10;
-
   var map = [];
 
-  for(var i = 0; i < WIDTH; i++) {
+  for(var i = 0; i < MAP_WIDTH; i++) {
     map[i] = [];
-    for(var j = 0; j < HEIGHT; j++) {
-      if(i == 0 || i == WIDTH-1 || j == 0 || j == HEIGHT-1) {
+    for(var j = 0; j < MAP_HEIGHT; j++) {
+      // create border
+      if(i == 0 || i == MAP_WIDTH-1 || j == 0 || j == MAP_HEIGHT-1) {
         map[i][j] = 1;
       } else {
-        map[i][j] = Math.round(Math.random());
+        map[i][j] = 0;
       }
     }
   }
 
   return map;
+}
+
+function worldToGrid(x, y) {
+  x = Math.floor(x / CELL_SIZE);
+  y = Math.floor(y / CELL_SIZE);
+  return [x, y];
 }
 
 function intersect(rect1, rect2) {
