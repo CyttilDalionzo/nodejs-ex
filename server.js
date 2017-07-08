@@ -122,11 +122,11 @@ var amountInRoom = 0;
 var games = {};
 
 var MAX_PLAYER_AMOUNT = 4;
-var GRAVITY_CONST = 10;
+var GRAVITY_CONST = 120;
 
 var CELL_SIZE = 50;
-var MAP_WIDTH = 50;
-var MAP_HEIGHT = 50;
+var MAP_WIDTH = 30;
+var MAP_HEIGHT = 20;
 
 // A user connects
 io.on('connection', function(socket) {
@@ -204,105 +204,157 @@ io.on('connection', function(socket) {
         continue;
       }
 
+      // process input
+      if(cp.desiredInput != null) {
+        var ip = cp.desiredInput;
+        if(ip[0] != 0) {
+          cp.velX = ip[0] * cp.speed;
+        }
+
+        if(ip[1] == -1) {
+          cp.velY = ip[1] * cp.speed;
+        }
+        cp.desiredInput = null;
+      }
+
       // apply gravity
       cp.velY += GRAVITY_CONST * dt;
 
       // CHECK FOR COLLISIONS
       // essentially, we calculate a square of grid positions that could possibly have been hit
-      var startGrids = worldToGrid(cp.x, cp.y);
-      var endGrids = worldToGrid(cp.x + cp.velX * dt, cp.y + cp.velY * dt); 
-      var bounds = [ [Math.min(startGrids[0], endGrids[0]) - 1, Math.max(startGrids[0], endGrids[0]) + 1 ], [Math.min(startGrids[1], endGrids[1]) - 1, Math.max(startGrids[1], endGrids[1]) + 1] ];
 
-      var nearestHit = 1;
-      var startC = [cp.x, cp.y];
-      var endC = [cp.x + cp.velX * dt, cp.y + cp.velY * dt];
+      var remainingtime = 1;
+      //var epsilon = 0.000001;
+      var touching = false;
 
-      // go through this square of squares, and calculate hit positions
-      for(var i = bounds[0][0]; i <= bounds[0][1]; i++) {
-        for(var j = bounds[1][0]; j <= bounds[1][1]; j++) {
+      while(remainingtime > 0) {
+        var hitSomething = false;
 
-          // if there's no square here, continue
-          if(i < 0 || j < 0 || i > MAP_WIDTH || j > MAP_HEIGHT || curGame.map[i][j] == 0) {
-            continue;
+        var startGrids = worldToGrid(cp.x, cp.y);
+        var endGrids = worldToGrid(cp.x + cp.velX * dt, cp.y + cp.velY * dt); 
+        var bounds = [ [Math.min(startGrids[0], endGrids[0]) - 1, Math.max(startGrids[0], endGrids[0]) + 1 ], [Math.min(startGrids[1], endGrids[1]) - 1, Math.max(startGrids[1], endGrids[1]) + 1] ];
+
+        // start and end coordinates
+        var nearestHit = 1, nearestHitNormals = [];
+
+        var newVelocityX = cp.velX;
+        var newVelocityY = cp.velY;
+
+        if(cp.velX == 0 && cp.velY == 0) {
+
+        }
+
+        if(!touching) {
+          if(cp.velX == 0) {
+            newVelocityX = 0.00001;
+          } 
+          
+          if(cp.velY == 0) {
+            newVelocityY = 0.00001;
           }
+        }
 
-          var hit = false;
+        var startC = [cp.x, cp.y];
+        var endC = [cp.x + newVelocityX * dt, cp.y + newVelocityY * dt];
 
-          // pad the square with the size of our player
-          var square = { x: (i + 0.5) * CELL_SIZE, y: (j + 0.5) * CELL_SIZE, halfWidth: CELL_SIZE * 0.5, halfHeight: CELL_SIZE * 0.5};
+        // go through this square of squares, and calculate hit positions
+        for(var i = bounds[0][0]; i <= bounds[0][1]; i++) {
+          for(var j = bounds[1][0]; j <= bounds[1][1]; j++) {
 
-          var paddingX = CELL_SIZE * 0.5;
-          var paddingY = CELL_SIZE * 0.5;
-          var deltaX = (endC[0] - startC[0]);
-          var deltaY = (endC[1] - startC[1]);
+            // if there's no square here, continue
+            if(i < 0 || j < 0 || i >= MAP_WIDTH || j >= MAP_HEIGHT || curGame.map[i][j] == 0) {
+              continue;
+            }
 
-          // test the movement segment against this padded square
-          var scaleX = 1.0 / deltaX;
-          var scaleY = 1.0 / deltaY;
+            // pad the square with the size of our player
+            var square = { x: (i + 0.5) * CELL_SIZE, y: (j + 0.5) * CELL_SIZE, halfWidth: CELL_SIZE * 0.5, halfHeight: CELL_SIZE * 0.5};
 
-          console.log(scaleX + " || " + scaleY);
+            var paddingX = CELL_SIZE * 0.5;
+            var paddingY = CELL_SIZE * 0.5;
+            var deltaX = (endC[0] - startC[0]);
+            var deltaY = (endC[1] - startC[1]);
 
-          var signX = (scaleX > 0) ? 1 : -1;
-          var signY = (scaleY > 0) ? 1 : -1;
+            // test the movement segment against this padded square
+            var scaleX = 1.0 / deltaX;
+            var scaleY = 1.0 / deltaY;
 
-          console.log(signX + " || " + signY);
-          console.log(square);
+            var signX = (scaleX > 0) ? 1 : -1;
+            var signY = (scaleY > 0) ? 1 : -1;
 
-          var nearTimeX = 0, farTimeX = 0, nearTimeY = 0, farTimeY = 0;
+            var nearTimeX = 0, farTimeX = 0, nearTimeY = 0, farTimeY = 0;
 
-          if(deltaX == 0) {
-            nearTimeX = Infinity;
-            farTimeX = Infinity;
-          } else {
+            // find X hit time
             nearTimeX = (square.x - signX * (square.halfWidth + paddingX) - startC[0]) * scaleX;
             farTimeX = (square.x + signX * (square.halfWidth + paddingX) - startC[0]) * scaleX;
-          }
 
-          if(deltaY == 0) {
-            nearTimeY = Infinity;
-            farTimeY = Infinity;
-          } else {
+            // find Y hit time
             nearTimeY = (square.y - signY * (square.halfHeight + paddingY) - startC[1]) * scaleY;
             farTimeY = (square.y + signY * (square.halfHeight + paddingY) - startC[1]) * scaleY;
+
+            // if no hit at all, ignore and move on
+            if(nearTimeX > farTimeY || nearTimeY > farTimeX) {
+              continue;
+            }
+
+            var nearTime = Math.max(nearTimeX, nearTimeY);
+            var farTime = Math.min(farTimeX, farTimeY);
+
+            // also can't be a hit
+            if(nearTime >= 1 || farTime <= 0) {
+              continue;
+            }
+
+            hitSomething = true;
+
+            // calculate hit time
+            var hitTime = Math.min(Math.max(nearTime, 0), 1);
+
+            // if hit, check if it's the nearest hit
+            if(hitTime < nearestHit) {
+              nearestHit = hitTime;
+
+              var hitNormals = [0, -signY];
+              if(nearTimeX > nearTimeY) {
+                hitNormals = [-signX, 0];
+              }
+              nearestHitNormals = hitNormals;
+            }
+          }
+        }
+
+        // add speed to position (according to how long the thing can keep moving until it collides)
+        if(hitSomething && nearestHit > remainingtime) {
+          nearestHit = remainingtime;
+          hitSomething = false;
+        }
+
+        console.log(newVelocityX + " || " + newVelocityY);
+
+        cp.x += newVelocityX * nearestHit * dt;
+        cp.y += newVelocityY * nearestHit * dt;
+
+        remainingtime = remainingtime - nearestHit;
+
+        console.log(hitSomething + " || " + nearestHitNormals);
+
+        // if we hit something, slide it along!
+        if(hitSomething) {
+          touching = true;
+          if(nearestHitNormals[0] == 0) {
+            cp.velY = 0;
           }
 
-          // if no hit at all, ignore and move on
-          if(nearTimeX > farTimeY || nearTimeY > farTimeX) {
-            continue;
-          }
-
-          console.log(nearTimeX + " || " + farTimeX + " || " + nearTimeY + " || " + farTimeY);
-
-          var nearTime = Math.max(nearTimeX, nearTimeY);
-          var farTime = Math.max(farTimeX, farTimeY);
-
-          if(nearTime >= 1 || farTime <= 0) {
-            continue;
-          }
-
-          console.log(nearTime + " .. " + farTime);
-
-          var hitTime = Math.min(Math.max(nearTime, 0), 1);
-          var hitNormals = [0, -signY];
-          if(nearTimeX > nearTimeY) {
-            hitNormals = [-signX, 0];
-          }
-
-          var epsilon = 0.000001;
-          // if hit, check collision axis (x or y), and check if this is the nearest for that axis
-          if(nearTime < nearestHit) {
-            nearestHit = hitTime - epsilon;
+          if(nearestHitNormals[1] == 0) {
+            cp.velX = 0;
           }
         }
       }
 
-      // if nothing was hit, simply apply speed to position
-      cp.x += cp.velX * nearestHit * dt;
-      cp.y += cp.velY * nearestHit * dt;
-
       // reset x-speed
-      cp.velX = 0;
-
+      cp.velX *= 0.94;
+      if(cp.velX < 0.1) {
+        cp.velX = 0;
+      }
     }
 
 
@@ -321,14 +373,15 @@ io.on('connection', function(socket) {
       myRoom = msg.room;
       var curGame = games[myRoom];
       var myPlayer = curGame.players[msg.num];
+      myPlayer.desiredInput = msg.input
 
       var input = msg.input;
 
       // Update the velocity of this player (and thus its position)
-      myPlayer.velX = input[0] * myPlayer.speed;
-
       if(input[1] == -1) {
          myPlayer.velY = input[1] * myPlayer.speed;
+      } else {
+         myPlayer.velX = input[0] * myPlayer.speed;
       }
 
 
@@ -373,7 +426,7 @@ server.listen(8080, function(){
 });
 
 function createNewPlayer(id) {
-  var newPlayer = { x: 100, y: 100, velX: 0, velY: 0, lives: 3, health: 100, speed: 5 };
+  var newPlayer = { x: 100, y: 100, velX: 0, velY: 0, lives: 3, health: 100, speed: 40, desiredInput: null };
   games[id].players.push(newPlayer);
 }
 
@@ -384,7 +437,7 @@ function createMap() {
     map[i] = [];
     for(var j = 0; j < MAP_HEIGHT; j++) {
       // create border
-      if(i == 0 || i == MAP_WIDTH-1 || j == 0 || j == MAP_HEIGHT-1) {
+      if(i == 0 || i == MAP_WIDTH-1 || j == 0 || j == MAP_HEIGHT-1 || (j%4 == 0 && i%2 == 0)) {
         map[i][j] = 1;
       } else {
         map[i][j] = 0;
