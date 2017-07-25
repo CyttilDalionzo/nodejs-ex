@@ -222,12 +222,22 @@ io.on('connection', function(socket) {
     ball.y += ball.velY * dt;
     ball.x += ball.velX * dt;
 
+    // TO PREVENT BALL STANDING STILL
+    if(Math.abs(ball.velX) < 0.05) {
+      ball.velX *= 3.5;
+    }
+
     // BALL UPPER AND LOWER BOUNDS
     if(ball.y > HEIGHT - BALL_RADIUS) {
-      ball.velY *= -1.1;
+      ball.velY *= -1.3;
+
+      if(ball.velY >= 0 && ball.velY < 0.5) {
+        ball.velY *= 4;  
+      }
+
       ball.y = HEIGHT - BALL_RADIUS;
     } else if(ball.y < 0.0 + BALL_RADIUS) {
-      ball.velY = 0;
+      ball.velY *= -0.5;
       ball.y = 0.0 + BALL_RADIUS;
     }
 
@@ -238,12 +248,14 @@ io.on('connection', function(socket) {
       ball.velY = -20;
       ball.velX = -10;
       curGame.score[1]++;
+      io.in(myRoom).emit('score', curGame.score);
     } else if(ball.x > WIDTH) {
       ball.x = 0.5 * WIDTH;
       ball.y = 0.5 * HEIGHT;
       ball.velY = -20;
       ball.velX = 10;
       curGame.score[0]++;
+      io.in(myRoom).emit('score', curGame.score);
     }
 
     var foundCollision = false;
